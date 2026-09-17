@@ -26,7 +26,6 @@
   h1 { font-size: 1.8rem; margin: 0 0 4px; color: #fff; }
   .sub { color: #a0a0b0; margin-bottom: 24px; font-size: .95rem; }
 
-  /* Dropzone */
   .dropzone {
     border: 2px dashed #4a4a5e;
     border-radius: 14px;
@@ -43,7 +42,6 @@
   .dz-hint { color: #8a8a9e; font-size: .82rem; }
   input[type=file] { display: none; }
 
-  /* Toolbar */
   .toolbar {
     display: flex;
     justify-content: space-between;
@@ -54,7 +52,6 @@
   .queue-info { color: #a0a0b0; font-size: .85rem; }
   .toolbar-btns { display: flex; gap: 8px; }
 
-  /* File list */
   .file-list {
     margin-top: 12px;
     display: flex;
@@ -87,6 +84,7 @@
     font-size: .75rem;
     color: #8a8a9e;
     margin-top: 2px;
+    word-break: break-word;
   }
   .file-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 
@@ -122,7 +120,6 @@
   .btn-icon.remove { color: #ff6b6b; }
   .btn-icon.remove:hover { background: #4a1a1a; border-color: #7a2a2a; }
 
-  /* Actions */
   .actions {
     margin-top: 20px;
     display: flex;
@@ -156,6 +153,21 @@
   button.secondary:hover:not(:disabled) { border-color: var(--accent); background: #2f2a44; }
   button.secondary:disabled { opacity: .4; cursor: not-allowed; }
 
+  /* Info banner */
+  .info-banner {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #2a2444;
+    border: 1px solid #4a3a6e;
+    color: #c8b8e8;
+    font-size: .85rem;
+    line-height: 1.5;
+    display: none;
+  }
+  .info-banner.show { display: block; }
+  .info-banner strong { color: #e0d0ff; }
+
   .footer {
     margin-top: 24px;
     color: #6a6a7e;
@@ -171,7 +183,6 @@
   <h1>🛠 Universal File Repair Tool</h1>
   <p class="sub">PDF · DOCX · PPTX · XLSX · PNG · JPG · GIF · TEX · ZIP — repair multiple files at once.</p>
 
-  <!-- Dropzone -->
   <div class="dropzone" id="dropzone">
     <div class="dz-icon">📁</div>
     <div class="dz-text">Drag &amp; drop files here</div>
@@ -179,7 +190,10 @@
     <input type="file" id="fileInput" multiple />
   </div>
 
-  <!-- Toolbar -->
+  <div class="info-banner" id="infoBanner">
+    <strong>ℹ️ Repair tip:</strong> This tool fixes structural and minor corruption (headers, ZIP containers, XML, encoding). For heavily corrupted Office files, use <strong>Microsoft's "Open and Repair"</strong> (File → Open → click arrow next to Open → Open and Repair) or a specialized recovery tool.
+  </div>
+
   <div class="toolbar" id="toolbar" style="display:none;">
     <div class="queue-info" id="queueInfo">0 files</div>
     <div class="toolbar-btns">
@@ -187,10 +201,8 @@
     </div>
   </div>
 
-  <!-- File list -->
   <div class="file-list" id="fileList"></div>
 
-  <!-- Actions -->
   <div class="actions">
     <button class="primary" id="repairBtn" disabled>🚀 Repair All</button>
     <button class="secondary" id="downloadAllBtn" style="display:none;">⬇ Download All</button>
@@ -213,6 +225,7 @@ const downloadAllBtn = document.getElementById("downloadAllBtn");
 const clearBtn = document.getElementById("clearBtn");
 const toolbar = document.getElementById("toolbar");
 const queueInfo = document.getElementById("queueInfo");
+const infoBanner = document.getElementById("infoBanner");
 
 let queue = [];  // { id, file, status, el, blob, downloadName }
 
@@ -262,8 +275,10 @@ function updateUI() {
   if (total > 0) {
     toolbar.style.display = "flex";
     queueInfo.textContent = `${total} file${total > 1 ? "s" : ""} · ${done} done · ${pending + working} pending`;
+    infoBanner.classList.add("show");
   } else {
     toolbar.style.display = "none";
+    infoBanner.classList.remove("show");
   }
 
   repairBtn.disabled = total === 0 || (pending + working === 0);
@@ -398,7 +413,6 @@ async function repairOne(item) {
 
     setStatus(item, "done", "✓ done");
 
-    // Auto-download each repaired file
     const AUTO_DOWNLOAD = true;
     if (AUTO_DOWNLOAD) {
       triggerDownload(blob, downloadName);
@@ -407,7 +421,7 @@ async function repairOne(item) {
     console.error(e);
     setStatus(item, "error", "✗ failed");
     const meta = item.el.querySelector(".file-meta");
-    meta.textContent = e.message.slice(0, 80);
+    meta.textContent = e.message.slice(0, 200);
     meta.style.color = "#ff9a9a";
   }
 }
