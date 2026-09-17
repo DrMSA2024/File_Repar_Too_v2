@@ -1,6 +1,7 @@
 """
 Universal File Repair API
 FastAPI backend for repairing corrupted files.
+Improved PPTX/DOCX/XLSX repair with XML recovery.
 """
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
@@ -9,6 +10,7 @@ from pathlib import Path
 import tempfile
 import zipfile
 import os
+import re
 from datetime import datetime
 
 from pypdf import PdfReader, PdfWriter
@@ -52,7 +54,6 @@ MAX_BYTES = 4 * 1024 * 1024
 # ============================================================
 def repair_pdf(data: bytes) -> bytes:
     """Repair PDF: fix header, add EOF, rebuild object tree."""
-    # Fix missing header
     if not data.startswith(b"%PDF-"):
         idx = data.find(b"%PDF-")
         if idx > 0:
@@ -60,11 +61,9 @@ def repair_pdf(data: bytes) -> bytes:
         else:
             data = b"%PDF-1.4\n" + data
 
-    # Ensure %%EOF at end
     if b"%%EOF" not in data[-1024:]:
         data = data.rstrip() + b"\n%%EOF\n"
 
-    # Try to rebuild PDF structure with pypdf
     tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     tmp_in.write(data)
     tmp_in.close()
@@ -81,7 +80,6 @@ def repair_pdf(data: bytes) -> bytes:
             writer.write(f)
         return Path(tmp_out.name).read_bytes()
     except Exception:
-        # If rebuild fails, return header-fixed version
         return data
     finally:
         os.unlink(tmp_in.name)
@@ -94,14 +92,12 @@ def repair_pdf(data: bytes) -> bytes:
 # ============================================================
 def repair_image(data: bytes, ext: str) -> bytes:
     """Repair image: strip junk before header, re-encode with Pillow."""
-    # Strip bytes before magic header
     magic = MAGIC.get(ext)
     if magic and not data.startswith(magic):
         idx = data.find(magic)
         if idx > 0:
             data = data[idx:]
 
-    # Write to temp file
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     tmp.write(data)
     tmp.close()
@@ -122,7 +118,6 @@ def repair_image(data: bytes, ext: str) -> bytes:
             ".tiff": "TIFF",
         }.get(ext, "PNG")
 
-        # JPEG doesn't support transparency
         if fmt == "JPEG" and img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
@@ -137,10 +132,58 @@ def repair_image(data: bytes, ext: str) -> bytes:
 
 
 # ============================================================
-# ZIP-BASED REPAIR (DOCX, PPTX, XLSX, ZIP, ODF)
+# XML REPAIR (helper for ZIP-based files)
+# ============================================================
+def repair_xml(xml_bytes: bytes) -> bytes:
+    """Repair common XML issues: null bytes, missing closing tags, missing declaration."""
+    try:
+        text = xml_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        return xml_bytes
+
+    # Remove null bytes
+    text = text.replace("\x00", "")
+
+    # Find all opened tags (excluding self-closing) and all closed tags
+    opened = re.findall(r'<([a-zA-Z][\w:.-]*)[^>]*?(?<!/)>', text)
+    closed = re.findall(r'</([a-zA-Z][\w:.-]*)>', text)
+
+    balance = {}
+    for tag in opened:
+        balance[tag] = balance.get(tag, 0) + 1
+    for tag in closed:
+        balance[tag] = balance.get(tag, 0) - 1
+
+    # Append missing closing tags before the final '>'
+    missing = []
+    for tag, count in balance.items():
+        if count > 0:
+            missing.extend([f"</{tag}>"] * count)
+
+    if missing:
+        close_pos = text.rfind(">")
+        if close_pos > 0:
+            text = text[: close_pos + 1] + "".join(missing) + text[close_pos + 1:]
+        else:
+            text += "".join(missing)
+
+    # Ensure XML declaration
+    if not text.lstrip().startswith("<?xml"):
+        text = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + text
+
+    return text.encode("utf-8")
+
+
+# ============================================================
+# ZIP-BASED REPAIR — IMPROVED for PPTX/DOCX/XLSX
 # ============================================================
 def repair_zip_based(data: bytes, ext: str) -> bytes:
-    """Repair ZIP containers (Office docs, EPUB, etc.)."""
+    """
+    Advanced repair for ZIP-based Office files (PPTX, DOCX, XLSX).
+    - Rebuilds ZIP container, skipping corrupt entries
+    - Repairs XML structure (adds missing closing tags, fixes encoding)
+    - Validates essential files exist
+    """
     tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     tmp_in.write(data)
     tmp_in.close()
@@ -149,17 +192,77 @@ def repair_zip_based(data: bytes, ext: str) -> bytes:
     tmp_out.close()
 
     try:
-        with zipfile.ZipFile(tmp_in.name, "r") as zin:
-            with zipfile.ZipFile(tmp_out.name, "w", zipfile.ZIP_DEFLATED) as zout:
+        entries = {}
+
+        # ---- Step 1: Read every entry from the (possibly damaged) ZIP ----
+        try:
+            with zipfile.ZipFile(tmp_in.name, "r") as zin:
                 for item in zin.infolist():
                     try:
-                        zout.writestr(item, zin.read(item.filename))
+                        content = zin.read(item.filename)
+                        entries[item.filename] = {"data": content, "info": item}
                     except Exception:
-                        # Skip corrupt entries, keep going
-                        pass
+                        # Try partial recovery
+                        try:
+                            with zin.open(item) as f:
+                                content = f.read()
+                                entries[item.filename] = {"data": content, "info": item}
+                        except Exception:
+                            pass
+        except zipfile.BadZipFile:
+            raise HTTPException(
+                400,
+                "File is not a valid ZIP container — it may be truncated or "
+                "badly corrupted. Original content cannot be recovered by this tool. "
+                "Try Microsoft PowerPoint's 'Open and Repair' or an online recovery service.",
+            )
+
+        if not entries:
+            raise HTTPException(400, "ZIP container is empty or unreadable.")
+
+        # ---- Step 2: Repair XML entries, rewrite everything ----
+        with zipfile.ZipFile(tmp_out.name, "w", zipfile.ZIP_DEFLATED) as zout:
+            for filename, entry in entries.items():
+                content = entry["data"]
+
+                # Repair XML / relationship files
+                if filename.endswith(".xml") or filename.endswith(".rels"):
+                    content = repair_xml(content)
+
+                try:
+                    zout.writestr(entry["info"], content)
+                except Exception:
+                    zout.writestr(filename, content)
+
+        # ---- Step 3: Validate required files ----
+        required = {
+            ".pptx": ["[Content_Types].xml", "ppt/presentation.xml"],
+            ".docx": ["[Content_Types].xml", "word/document.xml"],
+            ".xlsx": ["[Content_Types].xml", "xl/workbook.xml"],
+        }
+
+        if ext in required:
+            with zipfile.ZipFile(tmp_out.name, "r") as zcheck:
+                names = set(zcheck.namelist())
+                for req in required[ext]:
+                    if req not in names:
+                        basename = req.split("/")[-1]
+                        candidates = [n for n in names if n.endswith(basename)]
+                        if not candidates:
+                            raise HTTPException(
+                                400,
+                                f"Critical file missing inside the document: '{req}'. "
+                                f"The content appears to be permanently lost. "
+                                f"Try Microsoft PowerPoint's 'Open and Repair' or a "
+                                f"specialized recovery tool.",
+                            )
+
         return Path(tmp_out.name).read_bytes()
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(400, f"ZIP container repair failed: {e}")
+        raise HTTPException(400, f"Repair failed: {e}")
     finally:
         os.unlink(tmp_in.name)
         if os.path.exists(tmp_out.name):
@@ -171,10 +274,8 @@ def repair_zip_based(data: bytes, ext: str) -> bytes:
 # ============================================================
 def repair_text(data: bytes, ext: str) -> bytes:
     """Repair text files: strip nulls, fix encoding, balance braces."""
-    # Strip null bytes
     data = data.replace(b"\x00", b"")
 
-    # Try different encodings
     text = None
     for enc in ("utf-8", "utf-16", "latin-1", "cp1252"):
         try:
@@ -186,7 +287,6 @@ def repair_text(data: bytes, ext: str) -> bytes:
     if text is None:
         text = data.decode("utf-8", errors="replace")
 
-    # LaTeX-specific fixes
     if ext == ".tex":
         open_b = text.count("{")
         close_b = text.count("}")
@@ -200,7 +300,7 @@ def repair_text(data: bytes, ext: str) -> bytes:
 
 
 # ============================================================
-# GENERIC REPAIR (fallback for any file)
+# GENERIC REPAIR (fallback)
 # ============================================================
 def repair_generic(data: bytes, ext: str) -> bytes:
     """Generic repair: trim to known header."""
@@ -223,14 +323,13 @@ async def repair(file: UploadFile = File(...)):
     if len(raw) > MAX_BYTES:
         raise HTTPException(
             413,
-            f"File too large. Max {MAX_BYTES // 1024 // 1024} MB on free tier."
+            f"File too large. Max {MAX_BYTES // 1024 // 1024} MB on free tier.",
         )
 
     ext = Path(file.filename or "").suffix.lower()
     if not ext:
         raise HTTPException(400, "File must have an extension.")
 
-    # Route to correct repair function
     try:
         if ext == ".pdf":
             fixed = repair_pdf(raw)
@@ -247,7 +346,6 @@ async def repair(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(500, f"Repair failed: {e}")
 
-    # Save to temp file and return with proper download headers
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     tmp.write(fixed)
     tmp.close()
