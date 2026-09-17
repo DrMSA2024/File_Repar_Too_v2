@@ -11,6 +11,7 @@
     --bg: #1e1e2e;
     --card: #2a2a3e;
     --fg: #e0e0e0;
+    --border: #3a3a4e;
   }
   * { box-sizing: border-box; }
   body {
@@ -19,19 +20,17 @@
     background: var(--bg);
     color: var(--fg);
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    padding: 24px;
   }
-  .container { width: 100%; max-width: 760px; }
+  .container { width: 100%; max-width: 860px; margin: 0 auto; }
   h1 { font-size: 1.8rem; margin: 0 0 4px; color: #fff; }
   .sub { color: #a0a0b0; margin-bottom: 24px; font-size: .95rem; }
 
+  /* Dropzone */
   .dropzone {
     border: 2px dashed #4a4a5e;
     border-radius: 14px;
-    padding: 48px 24px;
+    padding: 40px 24px;
     text-align: center;
     background: var(--card);
     cursor: pointer;
@@ -39,52 +38,97 @@
   }
   .dropzone.drag { border-color: var(--accent2); background: #332e4a; }
   .dropzone:hover { border-color: var(--accent); }
-  .dz-icon { font-size: 3rem; margin-bottom: 8px; }
-  .dz-text { font-size: 1.1rem; margin-bottom: 4px; }
-  .dz-hint { color: #8a8a9e; font-size: .85rem; }
+  .dz-icon { font-size: 2.6rem; margin-bottom: 8px; }
+  .dz-text { font-size: 1.05rem; margin-bottom: 4px; }
+  .dz-hint { color: #8a8a9e; font-size: .82rem; }
   input[type=file] { display: none; }
 
-  .file-list {
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-top: 16px;
+    gap: 10px;
+  }
+  .queue-info { color: #a0a0b0; font-size: .85rem; }
+  .toolbar-btns { display: flex; gap: 8px; }
+
+  /* File list */
+  .file-list {
+    margin-top: 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
   .file-item {
     background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 12px 16px;
     display: flex;
     align-items: center;
     gap: 12px;
     font-size: .9rem;
+    transition: border-color .2s;
   }
-  .file-item .name {
-    flex: 1;
+  .file-item.done { border-color: #1a4a2a; }
+  .file-item.error { border-color: #4a1a1a; }
+
+  .file-icon { font-size: 1.4rem; flex-shrink: 0; }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 500;
   }
-  .file-item .size { color: #8a8a9e; font-size: .8rem; }
-  .file-item button {
-    background: transparent;
-    border: none;
-    color: #ff6b6b;
-    cursor: pointer;
-    font-size: 1.1rem;
-    padding: 4px 8px;
+  .file-meta {
+    font-size: .75rem;
+    color: #8a8a9e;
+    margin-top: 2px;
   }
-  .file-item .status {
-    font-size: .8rem;
-    padding: 2px 8px;
+  .file-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+  .status {
+    font-size: .75rem;
+    padding: 3px 10px;
     border-radius: 6px;
+    font-weight: 600;
+    white-space: nowrap;
   }
-  .status.pending { background: #3a3a4e; }
+  .status.pending { background: #3a3a4e; color: #b0b0c0; }
   .status.working { background: #5a4a1a; color: #ffd97a; }
   .status.done    { background: #1a4a2a; color: #7aff9a; }
   .status.error   { background: #4a1a1a; color: #ff9a9a; }
 
-  .actions { margin-top: 20px; display: flex; gap: 10px; }
+  .btn-icon {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    font-size: .9rem;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: all .15s;
+  }
+  .btn-icon:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: #332e4a;
+  }
+  .btn-icon:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-icon.download { color: #7aff9a; border-color: #2a5a3a; }
+  .btn-icon.download:hover:not(:disabled) { background: #1a4a2a; }
+  .btn-icon.remove { color: #ff6b6b; }
+  .btn-icon.remove:hover { background: #4a1a1a; border-color: #7a2a2a; }
+
+  /* Actions */
+  .actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
   button.primary {
     background: var(--accent);
     color: white;
@@ -97,50 +141,82 @@
     transition: background .2s;
   }
   button.primary:hover:not(:disabled) { background: var(--accent2); }
-  button.primary:disabled {
-    background: #444;
-    cursor: not-allowed;
-    color: #999;
+  button.primary:disabled { background: #444; cursor: not-allowed; color: #999; }
+
+  button.secondary {
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: .95rem;
+    cursor: pointer;
+    transition: all .2s;
   }
+  button.secondary:hover:not(:disabled) { border-color: var(--accent); background: #2f2a44; }
+  button.secondary:disabled { opacity: .4; cursor: not-allowed; }
+
   .footer {
     margin-top: 24px;
     color: #6a6a7e;
-    font-size: .8rem;
+    font-size: .78rem;
     text-align: center;
+    line-height: 1.6;
   }
+  .footer strong { color: #a0a0b0; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>🛠 Universal File Repair Tool</h1>
-  <p class="sub">PDF · DOCX · PPTX · XLSX · PNG · JPG · GIF · TEX · ZIP — repair corrupted files in your browser.</p>
+  <p class="sub">PDF · DOCX · PPTX · XLSX · PNG · JPG · GIF · TEX · ZIP — repair multiple files at once.</p>
 
+  <!-- Dropzone -->
   <div class="dropzone" id="dropzone">
     <div class="dz-icon">📁</div>
     <div class="dz-text">Drag &amp; drop files here</div>
-    <div class="dz-hint">or click to browse · max 4 MB per file (Vercel free tier)</div>
+    <div class="dz-hint">or click to browse · multiple files supported · max 4 MB each</div>
     <input type="file" id="fileInput" multiple />
   </div>
 
-  <div class="file-list" id="fileList"></div>
-
-  <div class="actions">
-    <button class="primary" id="repairBtn" disabled>🚀 Repair All</button>
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar" style="display:none;">
+    <div class="queue-info" id="queueInfo">0 files</div>
+    <div class="toolbar-btns">
+      <button class="btn-icon" id="clearBtn">Clear all</button>
+    </div>
   </div>
 
-  <div class="footer">Files processed on server &amp; deleted right after download.</div>
+  <!-- File list -->
+  <div class="file-list" id="fileList"></div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="primary" id="repairBtn" disabled>🚀 Repair All</button>
+    <button class="secondary" id="downloadAllBtn" style="display:none;">⬇ Download All</button>
+  </div>
+
+  <div class="footer">
+    Files processed on server &amp; deleted right after download.<br />
+    <strong>Note:</strong> Max 4 MB per file on Vercel free tier.
+  </div>
 </div>
 
 <script>
 const API = "/api/repair";
+
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("fileInput");
 const fileList = document.getElementById("fileList");
 const repairBtn = document.getElementById("repairBtn");
+const downloadAllBtn = document.getElementById("downloadAllBtn");
+const clearBtn = document.getElementById("clearBtn");
+const toolbar = document.getElementById("toolbar");
+const queueInfo = document.getElementById("queueInfo");
 
-let queue = [];
+let queue = [];  // { id, file, status, el, blob, downloadName }
 
-// ---------- Dropzone events ----------
+/* ============ Dropzone events ============ */
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("dragover", e => {
   e.preventDefault();
@@ -152,39 +228,95 @@ dropzone.addEventListener("drop", e => {
   dropzone.classList.remove("drag");
   addFiles([...e.dataTransfer.files]);
 });
-fileInput.addEventListener("change", e => addFiles([...e.target.files]));
+fileInput.addEventListener("change", e => {
+  addFiles([...e.target.files]);
+  fileInput.value = "";
+});
 
-// ---------- Helpers ----------
+/* ============ Helpers ============ */
 function humanSize(b) {
   if (b < 1024) return b + " B";
   if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
   return (b / 1024 / 1024).toFixed(2) + " MB";
 }
 
+function iconFor(name) {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (["pdf"].includes(ext)) return "📕";
+  if (["doc", "docx"].includes(ext)) return "📘";
+  if (["ppt", "pptx"].includes(ext)) return "📙";
+  if (["xls", "xlsx", "csv"].includes(ext)) return "📗";
+  if (["png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp"].includes(ext)) return "🖼️";
+  if (["zip", "rar", "7z"].includes(ext)) return "🗜️";
+  if (["txt", "md", "tex"].includes(ext)) return "📄";
+  if (["json", "xml", "html"].includes(ext)) return "🧾";
+  return "📎";
+}
+
+function updateUI() {
+  const total = queue.length;
+  const done = queue.filter(q => q.status === "done").length;
+  const pending = queue.filter(q => q.status === "pending").length;
+  const working = queue.filter(q => q.status === "working").length;
+
+  if (total > 0) {
+    toolbar.style.display = "flex";
+    queueInfo.textContent = `${total} file${total > 1 ? "s" : ""} · ${done} done · ${pending + working} pending`;
+  } else {
+    toolbar.style.display = "none";
+  }
+
+  repairBtn.disabled = total === 0 || (pending + working === 0);
+  repairBtn.textContent = working > 0
+    ? `⏳ Repairing (${done}/${total})…`
+    : `🚀 Repair All${pending ? ` (${pending})` : ""}`;
+
+  downloadAllBtn.style.display = done > 0 ? "inline-block" : "none";
+  downloadAllBtn.textContent = `⬇ Download All (${done})`;
+}
+
+/* ============ Add files ============ */
 function addFiles(files) {
   files.forEach(f => {
     const id = crypto.randomUUID();
     const el = renderItem({ id, file: f, status: "pending" });
-    queue.push({ id, file: f, status: "pending", el });
+    queue.push({ id, file: f, status: "pending", el, blob: null, downloadName: null });
   });
-  repairBtn.disabled = queue.length === 0;
+  updateUI();
 }
 
 function renderItem({ id, file, status }) {
   const row = document.createElement("div");
   row.className = "file-item";
   row.dataset.id = id;
+
   row.innerHTML = `
-    <span class="name" title="${file.name}">📄 ${file.name}</span>
-    <span class="size">${humanSize(file.size)}</span>
-    <span class="status pending">pending</span>
-    <button title="Remove">✖</button>
+    <span class="file-icon">${iconFor(file.name)}</span>
+    <div class="file-info">
+      <div class="file-name" title="${file.name}">${file.name}</div>
+      <div class="file-meta">${humanSize(file.size)}</div>
+    </div>
+    <div class="file-actions">
+      <span class="status pending">pending</span>
+      <button class="btn-icon download" title="Download repaired file" disabled>⬇</button>
+      <button class="btn-icon remove" title="Remove">✖</button>
+    </div>
   `;
-  row.querySelector("button").onclick = () => {
+
+  const removeBtn = row.querySelector(".remove");
+  const downloadBtn = row.querySelector(".download");
+
+  removeBtn.onclick = () => {
     queue = queue.filter(q => q.id !== id);
     row.remove();
-    repairBtn.disabled = queue.length === 0;
+    updateUI();
   };
+
+  downloadBtn.onclick = () => {
+    const item = queue.find(q => q.id === id);
+    if (item && item.blob) triggerDownload(item.blob, item.downloadName);
+  };
+
   fileList.appendChild(row);
   return row;
 }
@@ -194,11 +326,47 @@ function setStatus(item, status, text) {
   const el = item.el.querySelector(".status");
   el.className = "status " + status;
   el.textContent = text;
+  item.el.className = "file-item" + (status === "done" ? " done" : status === "error" ? " error" : "");
+  updateUI();
 }
 
-// ---------- Repair one file ----------
+/* ============ Filename detection ============ */
+function parseFilename(res, fallbackName) {
+  const cd = res.headers.get("Content-Disposition") || res.headers.get("content-disposition");
+  if (cd) {
+    let m = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    if (m) {
+      try { return decodeURIComponent(m[1].trim().replace(/^"|"$/g, "")); } catch (e) {}
+    }
+    m = cd.match(/filename="?([^";]+)"?/i);
+    if (m) {
+      try { return decodeURIComponent(m[1].trim()); } catch (e) { return m[1].trim(); }
+    }
+  }
+  const lastDot = fallbackName.lastIndexOf(".");
+  if (lastDot === -1) return fallbackName + "_repaired";
+  return fallbackName.slice(0, lastDot) + "_repaired" + fallbackName.slice(lastDot);
+}
+
+/* ============ Trigger download ============ */
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 1500);
+}
+
+/* ============ Repair one file ============ */
 async function repairOne(item) {
   setStatus(item, "working", "repairing…");
+  item.el.querySelector(".download").disabled = true;
 
   const fd = new FormData();
   fd.append("file", item.file, item.file.name);
@@ -207,41 +375,82 @@ async function repairOne(item) {
     const res = await fetch(API, { method: "POST", body: fd });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || "Repair failed");
+      let msg = "HTTP " + res.status;
+      try {
+        const j = await res.json();
+        msg = j.detail || msg;
+      } catch (e) {}
+      throw new Error(msg);
     }
 
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    const downloadName = parseFilename(res, item.file.name);
 
-    const a = document.createElement("a");
-    a.href = url;
-    const ext = item.file.name.substring(item.file.name.lastIndexOf("."));
-    a.download = item.file.name.replace(
-      new RegExp(ext.replace(".", "\\.") + "$"),
-      ""
-    ) + "_repaired" + ext;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    item.blob = blob;
+    item.downloadName = downloadName;
 
-    setStatus(item, "done", "✓ repaired");
+    const dlBtn = item.el.querySelector(".download");
+    dlBtn.disabled = false;
+    dlBtn.title = "Download " + downloadName;
+
+    const meta = item.el.querySelector(".file-meta");
+    meta.textContent = humanSize(item.file.size) + " → " + humanSize(blob.size) + " repaired";
+
+    setStatus(item, "done", "✓ done");
+
+    // Auto-download each repaired file
+    const AUTO_DOWNLOAD = true;
+    if (AUTO_DOWNLOAD) {
+      triggerDownload(blob, downloadName);
+    }
   } catch (e) {
     console.error(e);
-    setStatus(item, "error", "✗ " + e.message.slice(0, 40));
+    setStatus(item, "error", "✗ failed");
+    const meta = item.el.querySelector(".file-meta");
+    meta.textContent = e.message.slice(0, 80);
+    meta.style.color = "#ff9a9a";
   }
 }
 
-// ---------- Repair all ----------
+/* ============ Repair all ============ */
+let repairing = false;
 repairBtn.addEventListener("click", async () => {
-  repairBtn.disabled = true;
-  for (const item of queue) {
-    if (item.status === "done") continue;
+  if (repairing) return;
+  repairing = true;
+
+  const pending = queue.filter(q => q.status === "pending" || q.status === "error");
+  for (const item of pending) {
     await repairOne(item);
   }
-  repairBtn.disabled = false;
+
+  repairing = false;
+  updateUI();
 });
+
+/* ============ Download All ============ */
+downloadAllBtn.addEventListener("click", async () => {
+  const done = queue.filter(q => q.status === "done" && q.blob);
+  if (done.length === 0) return;
+
+  for (const item of done) {
+    triggerDownload(item.blob, item.downloadName);
+    await new Promise(r => setTimeout(r, 400));
+  }
+});
+
+/* ============ Clear all ============ */
+clearBtn.addEventListener("click", () => {
+  if (queue.some(q => q.status === "working")) {
+    alert("Please wait for repairs to finish.");
+    return;
+  }
+  queue = [];
+  fileList.innerHTML = "";
+  updateUI();
+});
+
+/* ============ Initial UI ============ */
+updateUI();
 </script>
 </body>
 </html>
