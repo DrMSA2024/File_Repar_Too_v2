@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Universal File Repair Tool</title>
+<style>
+  :root {
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --bg: #1e1e2e;
+    --card: #2a2a3e;
+    --fg: #e0e0e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container { width: 100%; max-width: 760px; }
+  h1 { font-size: 1.8rem; margin: 0 0 4px; color: #fff; }
+  .sub { color: #a0a0b0; margin-bottom: 24px; font-size: .95rem; }
+
+  .dropzone {
+    border: 2px dashed #4a4a5e;
+    border-radius: 14px;
+    padding: 48px 24px;
+    text-align: center;
+    background: var(--card);
+    cursor: pointer;
+    transition: all .2s ease;
+  }
+  .dropzone.drag { border-color: var(--accent2); background: #332e4a; }
+  .dropzone:hover { border-color: var(--accent); }
+  .dz-icon { font-size: 3rem; margin-bottom: 8px; }
+  .dz-text { font-size: 1.1rem; margin-bottom: 4px; }
+  .dz-hint { color: #8a8a9e; font-size: .85rem; }
+  input[type=file] { display: none; }
+
+  .file-list {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .file-item {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: .9rem;
+  }
+  .file-item .name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-item .size { color: #8a8a9e; font-size: .8rem; }
+  .file-item button {
+    background: transparent;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 4px 8px;
+  }
+  .file-item .status {
+    font-size: .8rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+  .status.pending { background: #3a3a4e; }
+  .status.working { background: #5a4a1a; color: #ffd97a; }
+  .status.done    { background: #1a4a2a; color: #7aff9a; }
+  .status.error   { background: #4a1a1a; color: #ff9a9a; }
+
+  .actions { margin-top: 20px; display: flex; gap: 10px; }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  button.primary:hover:not(:disabled) { background: var(--accent2); }
+  button.primary:disabled {
+    background: #444;
+    cursor: not-allowed;
+    color: #999;
+  }
+  .footer {
+    margin-top: 24px;
+    color: #6a6a7e;
+    font-size: .8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🛠 Universal File Repair Tool</h1>
+  <p class="sub">PDF · DOCX · PPTX · XLSX · PNG · JPG · GIF · TEX · ZIP — repair corrupted files in your browser.</p>
+
+  <div class="dropzone" id="dropzone">
+    <div class="dz-icon">📁</div>
+    <div class="dz-text">Drag &amp; drop files here</div>
+    <div class="dz-hint">or click to browse · max 4 MB per file (Vercel free tier)</div>
+    <input type="file" id="fileInput" multiple />
+  </div>
+
+  <div class="file-list" id="fileList"></div>
+
+  <div class="actions">
+    <button class="primary" id="repairBtn" disabled>🚀 Repair All</button>
+  </div>
+
+  <div class="footer">Files processed on server &amp; deleted right after download.</div>
+</div>
+
+<script>
+const API = "/api/repair";
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const fileList = document.getElementById("fileList");
+const repairBtn = document.getElementById("repairBtn");
+
+let queue = [];
+
+// ---------- Dropzone events ----------
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropzone.classList.add("drag");
+});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+dropzone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropzone.classList.remove("drag");
+  addFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener("change", e => addFiles([...e.target.files]));
+
+// ---------- Helpers ----------
+function humanSize(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+  return (b / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function addFiles(files) {
+  files.forEach(f => {
+    const id = crypto.randomUUID();
+    const el = renderItem({ id, file: f, status: "pending" });
+    queue.push({ id, file: f, status: "pending", el });
+  });
+  repairBtn.disabled = queue.length === 0;
+}
+
+function renderItem({ id, file, status }) {
+  const row = document.createElement("div");
+  row.className = "file-item";
+  row.dataset.id = id;
+  row.innerHTML = `
+    <span class="name" title="${file.name}">📄 ${file.name}</span>
+    <span class="size">${humanSize(file.size)}</span>
+    <span class="status pending">pending</span>
+    <button title="Remove">✖</button>
+  `;
+  row.querySelector("button").onclick = () => {
+    queue = queue.filter(q => q.id !== id);
+    row.remove();
+    repairBtn.disabled = queue.length === 0;
+  };
+  fileList.appendChild(row);
+  return row;
+}
+
+function setStatus(item, status, text) {
+  item.status = status;
+  const el = item.el.querySelector(".status");
+  el.className = "status " + status;
+  el.textContent = text;
+}
+
+// ---------- Repair one file ----------
+async function repairOne(item) {
+  setStatus(item, "working", "repairing…");
+
+  const fd = new FormData();
+  fd.append("file", item.file, item.file.name);
+
+  try {
+    const res = await fetch(API, { method: "POST", body: fd });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "Repair failed");
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    const ext = item.file.name.substring(item.file.name.lastIndexOf("."));
+    a.download = item.file.name.replace(
+      new RegExp(ext.replace(".", "\\.") + "$"),
+      ""
+    ) + "_repaired" + ext;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setStatus(item, "done", "✓ repaired");
+  } catch (e) {
+    console.error(e);
+    setStatus(item, "error", "✗ " + e.message.slice(0, 40));
+  }
+}
+
+// ---------- Repair all ----------
+repairBtn.addEventListener("click", async () => {
+  repairBtn.disabled = true;
+  for (const item of queue) {
+    if (item.status === "done") continue;
+    await repairOne(item);
+  }
+  repairBtn.disabled = false;
+});
+</script>
+</body>
+</html>
